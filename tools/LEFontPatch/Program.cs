@@ -80,7 +80,15 @@ namespace LEFontPatch {
 				using var manager = new LEFontManager(gameDataPath);
 				Console.WriteLine();
 
-				var sourceFonts = json["sourceFontFiles"]?.AsArray().Select(n => {
+				// Reapplication refreshes only the source font, without appending duplicate atlas/material assets.
+                if (json["cancelIfNoFontReplaced"]?.GetValue<bool>() == true && json["fontReplacements"] is JsonObject planned &&
+                    !manager.TMPFonts.Values.Any(f => planned.ContainsKey(f["m_Name"].AsString))) {
+                    foreach(var item in json["sourceFontFiles"]?.AsArray() ?? [])manager.TryAddFontFile(GetFile((string)item["path"]),out _);
+                    manager.Save();
+                    Console.WriteLine("Existing Powder UI fonts retained; shared source refreshed.");
+                    return;
+                }
+                var sourceFonts = json["sourceFontFiles"]?.AsArray().Select(n => {
 					manager.TryAddFontFile(GetFile((string)n["path"]), out var i);
 					return i;
 				}).ToArray() ?? [];

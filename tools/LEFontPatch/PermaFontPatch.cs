@@ -9,6 +9,7 @@ public static class PermaFontPatch {
  public static void Check(string dataPath) {
   var path=Path.Combine(dataPath,"StreamingAssets","LEAssetBundles","PermaLoad.bundle");
   var manager=new AssetsManager();
+  using(var tpk=Assembly.GetExecutingAssembly().GetManifestResourceStream("LEFontPatch.classdata.tpk"))manager.LoadClassPackage(tpk!);
   try {
    var bundle=manager.LoadBundleFile(path);var asset=manager.LoadAssetsFileFromBundle(bundle,0);int count=0;
    foreach(var info in asset.file.AssetInfos.Where(i=>i.TypeId==(int)AssetClassID.MonoBehaviour)) {
@@ -19,6 +20,8 @@ public static class PermaFontPatch {
     if(name.StartsWith("jf-openhuninn-2.1"))count++;
    }
    if(count!=5)throw new InvalidDataException($"PermaLoad Powder slots: expected 5, found {count}.");
+   manager.LoadClassDatabaseFromPackage(asset.file.Metadata.UnityVersion);
+   ValidateNativeChat(manager,asset);
    Console.WriteLine("Verified 5 Powder font slots in PermaLoad.bundle.");
   }finally{manager.UnloadAll();}
  }
@@ -38,9 +41,12 @@ public static class PermaFontPatch {
    }
    if(fonts.Values.Any(f=>f["m_Name"].AsString=="jf-openhuninn-2.1 SDF32")) {
     var dynamicFont=fonts.Values.Single(f=>f["m_Name"].AsString.StartsWith("jf-openhuninn-2.1")&&f["m_AtlasPopulationMode"].AsInt==1);
+    ValidateNativeChat(manager,assets);
     RefreshDynamicSource(path,bundle,assets,manager,dynamicFont,folder);
     return;
    }
+   var nativeFonts=fonts.ToDictionary(p=>p.Key,p=>p.Value.Clone());
+   if(nativeFonts.Count!=29)throw new InvalidDataException("Expected 29 original Season 5 font assets before patching.");
    var originals=assets.file.AssetInfos.ToDictionary(i=>i.PathId,i=>Hash(assets,i));
    var expected=new Dictionary<long,byte[]>();
    var nextId=assets.file.AssetInfos.Max(i=>i.PathId)+1;
@@ -105,6 +111,28 @@ public static class PermaFontPatch {
     var ptr=ValueBuilder.DefaultValueFieldFromArrayTemplate(array);ptr["m_FileID"].AsInt=0;ptr["m_PathID"].AsLong=target;
     array.Children.Insert(0,ptr);array.AsArray=new(array.Children.Count);Set(id,field.WriteToByteArray());
    }
+   // Snapshot fonts before UI normalization; private chat copies must never inherit Powder fallbacks.
+   var nativeIds=nativeFonts.Keys.ToDictionary(id=>id,id=>nextId++);
+   void RemapNative(AssetTypeValueField field) {
+    if(!field["m_FileID"].IsDummy&&!field["m_PathID"].IsDummy&&field["m_FileID"].AsInt==0&&nativeIds.TryGetValue(field["m_PathID"].AsLong,out var mapped))field["m_PathID"].AsLong=mapped;
+    foreach(var child in field.Children)RemapNative(child);
+   }
+   foreach(var (id,original) in nativeFonts) {
+    var clone=original.Clone();clone["m_Name"].AsString+=" (Native Chat)";RemapNative(clone);
+    if(id==4883444590345449907) {
+     var fallback=clone["m_FallbackFontAssetTable"]["Array"];
+     var ptr=ValueBuilder.DefaultValueFieldFromArrayTemplate(fallback);ptr["m_FileID"].AsInt=0;ptr["m_PathID"].AsLong=nativeIds[7321910592313900844];
+     fallback.Children.Add(ptr);fallback.AsArray=new(fallback.Children.Count);
+    }
+    var info=AssetFileInfo.Create(assets.file,nativeIds[id],114,assets.file.GetAssetInfo(id).GetScriptIndex(assets.file),manager.ClassDatabase);
+    info.TypeIdOrIndex=assets.file.GetAssetInfo(id).TypeIdOrIndex;
+    var bytes=clone.WriteToByteArray();info.SetNewData(bytes);assets.file.AssetInfos.Add(info);expected[info.PathId]=bytes;
+   }
+   var messageInfo=assets.file.GetAssetInfo(5720891894229404983);
+   var message=manager.GetBaseField(assets,messageInfo);
+   if(message["m_fontAsset"]["m_PathID"].AsLong!=4883444590345449907)throw new InvalidDataException("Unexpected native chat message font; unsupported game layout.");
+   message["m_fontAsset"]["m_PathID"].AsLong=nativeIds[4883444590345449907];Set(messageInfo.PathId,message.WriteToByteArray());
+   ValidateNativeChat(manager,assets);
    // Check complete font/material/atlas pairing before writing.
    foreach(var (id,kind) in replaced) {
     var font=fonts[id];
@@ -118,12 +146,28 @@ public static class PermaFontPatch {
    using(var writer=new AssetsFileWriter(unpacked))bundle.file.Write(writer);
    bundle.file.Close();bundle.file.Read(new AssetsFileReader(File.OpenRead(unpacked)));
    using(var writer=new AssetsFileWriter(temporary))bundle.file.Pack(writer,AssetBundleCompressionType.LZ4);
-   var check=new AssetsManager();var checkBundle=check.LoadBundleFile(temporary);var output=check.LoadAssetsFileFromBundle(checkBundle,0);
-   if(output.file.AssetInfos.Count!=originals.Count+6)throw new InvalidDataException("Perma asset count mismatch.");
+   var check=new AssetsManager();
+   using(var tpk=Assembly.GetExecutingAssembly().GetManifestResourceStream("LEFontPatch.classdata.tpk"))check.LoadClassPackage(tpk!);
+   var checkBundle=check.LoadBundleFile(temporary);var output=check.LoadAssetsFileFromBundle(checkBundle,0);
+   check.LoadClassDatabaseFromPackage(output.file.Metadata.UnityVersion);ValidateNativeChat(check,output);
+   if(output.file.AssetInfos.Count!=originals.Count+35)throw new InvalidDataException("Perma asset count mismatch.");
    foreach(var info in output.file.AssetInfos){var wanted=expected.TryGetValue(info.PathId,out var bytes)?Convert.ToHexString(SHA256.HashData(bytes)):originals[info.PathId];if(Hash(output,info)!=wanted)throw new InvalidDataException("Perma asset payload mismatch.");}
    check.UnloadAll();manager.UnloadAll();File.Move(temporary,path,true);File.Delete(unpacked);
-   Console.WriteLine($"PermaLoad verified: {fonts.Count} fonts handled; all other original payloads unchanged; 6 Powder assets added.");
+   Console.WriteLine($"PermaLoad verified: {fonts.Count} fonts handled; all other original payloads unchanged; 6 Powder assets and 29 isolated native chat fonts added.");
   } finally{manager.UnloadAll();}
+ }
+ public static void ValidateNativeChat(AssetsManager manager,AssetsFileInstance assets) {
+  var native=new Dictionary<long,AssetTypeValueField>();
+  foreach(var info in assets.file.AssetInfos.Where(i=>i.TypeId==114)) {
+   var field=manager.GetBaseField(assets,info);
+   if(field["m_Name"].AsString.EndsWith(" (Native Chat)"))native[info.PathId]=field;
+  }
+  if(native.Count!=29)throw new InvalidDataException("Native chat fonts are missing. For an installation patched by an older version, restore with Steam verification before applying this version.");
+  var message=manager.GetBaseField(assets,assets.file.GetAssetInfo(5720891894229404983));
+  if(!native.TryGetValue(message["m_fontAsset"]["m_PathID"].AsLong,out var font)||font["m_Name"].AsString!="Caladea SDF (Native Chat)")throw new InvalidDataException("Chat does not reference its isolated native font.");
+  var chinese=native.Values.Single(f=>f["m_Name"].AsString=="NotoSansSC-Regular SDF (Full Set) (Native Chat)");
+  if(chinese["m_CharacterTable"]["Array"].Children.Count!=5046)throw new InvalidDataException("Original native chat Chinese character table was changed.");
+  Console.WriteLine("Verified isolated native chat font references and 5,046-character original Chinese table.");
  }
  static void RefreshDynamicSource(string path,BundleFileInstance bundle,AssetsFileInstance assets,AssetsManager manager,AssetTypeValueField dynamicFont,string folder) {
   var source=manager.GetExtAsset(assets,dynamicFont["m_SourceFontFile"]);
@@ -145,7 +189,10 @@ public static class PermaFontPatch {
     bundle.file.Read(new AssetsFileReader(reader));
     using var writer=new AssetsFileWriter(temporary);bundle.file.Pack(writer,AssetBundleCompressionType.LZ4);
    }
-   var check=new AssetsManager();var checkBundle=check.LoadBundleFile(temporary);var output=check.LoadAssetsFileFromBundle(checkBundle,0);
+   var check=new AssetsManager();
+   using(var tpk=Assembly.GetExecutingAssembly().GetManifestResourceStream("LEFontPatch.classdata.tpk"))check.LoadClassPackage(tpk!);
+   var checkBundle=check.LoadBundleFile(temporary);var output=check.LoadAssetsFileFromBundle(checkBundle,0);
+   check.LoadClassDatabaseFromPackage(output.file.Metadata.UnityVersion);ValidateNativeChat(check,output);
    if(output.file.AssetInfos.Count!=originals.Count)throw new InvalidDataException("Perma refresh asset count mismatch.");
    foreach(var info in output.file.AssetInfos){var wanted=info.PathId==source.info.PathId?Convert.ToHexString(expected):originals[info.PathId];if(Hash(output,info)!=wanted)throw new InvalidDataException("Perma refreshed source verification failed.");}
    check.UnloadAll();File.Move(temporary,path,true);Console.WriteLine("PermaLoad dynamic font source updated and verified.");

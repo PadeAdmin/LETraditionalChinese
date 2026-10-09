@@ -16,6 +16,10 @@
 
 4. 遊戲內選擇「簡體中文」語言，會顯示修補後的繁體文字。
 
+**舊版升級：** 若遊戲曾套用尚未隔離聊天字型的舊版，先由 Steam 驗證遊戲檔案，再執行新版；舊版已清除部分原版字表，無法只靠重新執行補回。已使用新版隔離聊天字型的安裝，才可使用 `--refresh-fonts`。
+
+目前既有的 2.1.1 發布包不包含此聊天隔離修正；本分支修正請依下方步驟編譯。
+
 程式會直接替換遊戲資產。要還原，在 Steam 對遊戲執行「驗證遊戲檔案的完整性」。遊戲更新後先確認本版是否適用，再重新套用。
 
 發布包不需要另外安裝 .NET。從原始碼編譯則需要 .NET 10 SDK。
@@ -26,9 +30,9 @@
 .\LETraditionalChinese.exe --check "E:\SteamLibrary\steamapps\common\Last Epoch"
 ```
 
-檢查主資產與 `PermaLoad.bundle` 中預期的粉圓字型槽位；這不是完整的文字覆蓋或畫面驗證。
+檢查主資產的粉圓字型槽位，以及 `PermaLoad.bundle` 的 5 個粉圓字型槽位、29 個獨立原版聊天字型、聊天訊息引用及原版中文字表。這仍不等同完整畫面驗證。
 
-已安裝舊版工具時，可只更新字型資產，不重跑文字轉換：
+已安裝包含聊天隔離修正的版本時，可只更新字型資產，不重跑文字轉換：
 
 ```powershell
 .\LETraditionalChinese.exe --refresh-fonts "E:\SteamLibrary\steamapps\common\Last Epoch"
@@ -45,7 +49,7 @@
 | `Last Epoch_Data/resources.assets` | 注入字型、字型圖集、材質與 fallback 設定 |
 | `Last Epoch_Data/sharedassets0.assets` | 更新字型引用與字型 fallback |
 | `Last Epoch_Data/StreamingAssets/LEAssetBundles/assets_a3ec63478769f648.bundle` | 替換介面使用的 NotoSansSC／NotoSansTC 動態字型資產 |
-| `Last Epoch_Data/StreamingAssets/LEAssetBundles/PermaLoad.bundle` | 修補物品詳細說明、任務等常駐介面字型 |
+| `Last Epoch_Data/StreamingAssets/LEAssetBundles/PermaLoad.bundle` | 修補物品詳細說明、任務等常駐介面字型；保留獨立原版聊天字型並改接聊天訊息引用 |
 
 `GameAssembly.dll` 與 IL2CPP metadata 僅供解析型別時讀取，不會修改；也不修改遊戲 EXE 或存檔。一般字型與 bundle 修補不建立還原備份；沿用的 catalog 程式在部分格式分支仍可能建立 `catalog.bin.bak`。還原方式以 Steam 驗證為準。
 
@@ -58,7 +62,7 @@
 | `LETraditionalChinese/fonts/`、`LETraditionalChinese/manifest.json` | 沿用原作者的字型與圖集資料；更換字型不能只換 TTF，需同步對應資料 |
 | `tools/LEFontPatch/LEFontManager.cs` | `resources.assets`／`sharedassets0.assets`，字型來源更新、引用與 fallback 正規化 |
 | `tools/LEFontPatch/BundleFontPatch.cs` | 指定介面 bundle 的動態字型、圖集與材質；版本變動時先查 bundle 檔名與資產 |
-| `tools/LEFontPatch/PermaFontPatch.cs` | `PermaLoad.bundle` 中的字型、fallback、材質 padding／GradientScale，以及既有安裝字型來源更新 |
+| `tools/LEFontPatch/PermaFontPatch.cs` | `PermaLoad.bundle` 中的字型、fallback、材質 padding／GradientScale，以及既有安裝字型來源更新；修改前複製原版聊天字型，重接 fallback／字重引用與訊息範本 |
 | `tools/prepare-powder-font.py`、`tools/font-source/` | 從粉圓體原始資產與 Noto Sans TC 字型補齊中文字形，更新打包字型資料 |
 | `tools/LEFontPatch/Program.cs` | 字型修補工具入口 |
 | `tools/LELocalePatch/Program.cs`、`Catalog.cs` | 語系 bundle 的文字替換與 catalog CRC 處理 |
@@ -86,7 +90,9 @@ Compress-Archive -Path .\artifacts\publish\* -DestinationPath .\artifacts\LETrad
 - 原作者字典來自 Azure AI Translator，並經原作者程式及部分人工調整。本版保留此基礎，新增／整理第 5 賽季文字，使用 OpenCC `s2tw` 做繁體轉換；新增內容並非全面人工校對。
 - 字典包含本次語系的對照與已轉換文字的自身映射。官方新增且未收進字典的文字，仍可能顯示簡體。
 - 以原作者粉圓體（jf-openhuninn 2.1）資產為主，統一中文 fallback，修正原本仍使用襯線字的介面。
-- 粉圓體保留原有字形；原字庫缺少的中文字形補入 Noto Sans TC，涵蓋該字型提供的 18,043 個中日韓字碼。世界聊天中的簡體或繁體字即使不在遊戲翻譯字典，也能由同一套動態字型顯示。修改後字型內部名稱為 `LE Chinese Rounded`；遊戲資產名稱保留原有形式以維持工具相容。
+- 粉圓體保留原有字形；原字庫缺少的中文字形補入 Noto Sans TC，涵蓋該字型提供的 18,043 個中日韓字碼。此補字僅用於遊戲介面，不作為世界聊天的顯示方案。修改後字型內部名稱為 `LE Chinese Rounded`；遊戲資產名稱保留原有形式以維持工具相容。
+- 世界聊天保留遊戲原版字型與字圖，與任務、物品介面的粉圓體分開：在修改任何常駐字型前複製 29 個原版 TMP 字型，重接內部 fallback／字重引用，讓聊天訊息範本引用獨立的原版 Caladea 與 Noto Sans SC。原版中文字表保留 5,046 筆；玩家訊息不經繁簡轉換。
+- 字型圖集與材質沿用原版引用；新增聊天 TMP 字型時保留正確 script/type 索引，避免新增成無型別資訊的 MonoBehaviour。處理兩份內部同名的 bundle 必須使用不同 `AssetsManager`；整合版直接在修改前取得原版快照，避免載入快取混用。
 - 執行 `python tools/prepare-powder-font.py` 可重建打包字型；需要 Python `fontTools`。一般 .NET 建置不需要執行此步驟。
 
 ### 已完成驗證
@@ -96,8 +102,8 @@ Compress-Archive -Path .\artifacts\publish\* -DestinationPath .\artifacts\LETrad
 - 修補 bundle 重新開啟，比對預期替換資產及未修改資產內容。
 - `--check` 驗證主字型及常駐 bundle 字型槽位。
 - 字型產生腳本確認粉圓體新增 8,631 個 Noto Sans TC 字形，CJK 覆蓋 18,043 個字碼。
-- 更新已安裝的遊戲後，重新開啟 `--check` 通過；世界聊天外觀需在遊戲中確認。
-- 使用者實機確認地圖、物品詳細說明及任務介面顯示正常。
+- 原版資產修補後重新開啟 bundle，核對 35 個新增資產、預定替換資產、未修改資產雜湊，以及聊天引用；重新套用保留聊天資產。
+- 使用者實機確認世界聊天、地圖、物品詳細說明及任務介面同時顯示正常。檔案檢查通過不代表畫面已驗證。
 
 ## 授權與來源
 
