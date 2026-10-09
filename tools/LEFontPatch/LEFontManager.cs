@@ -73,7 +73,7 @@ namespace LEFontPatch {
 				if (Found(i))
 					return i;
 			return -1;
-			
+
 			bool Found(int index) {
 				var ae = manager.GetExtAsset(assets, monoScripts[index].FileId, monoScripts[index].PathId, true);
 				return GetAssetName(ae.file, ae.info) == typeName;
@@ -480,4 +480,3 @@ namespace LEFontPatch {
 		}
 	}
 }
-

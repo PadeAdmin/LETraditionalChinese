@@ -12,7 +12,7 @@
 		<IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
 		<DebuggerSupport>false</DebuggerSupport>
 		<EventSourceSupport>false</EventSourceSupport>
-		
+
 		<Version>2.1.0</Version>
 		<Authors>aianlinb</Authors>
 		<Copyright>Copyright © 2024-2025 aianlinb</Copyright>

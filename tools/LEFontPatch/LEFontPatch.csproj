@@ -22,9 +22,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		
+
 		<ProjectReference Include="..\..\deps\AssetsTools.NET\AssetsTools.NET.Cpp2IL\AssetsTools.NET.Cpp2IL.csproj" /> <!--At least 1.0.1-preview1-->
-		
+
 		<EmbeddedResource Include="classdata.tpk" />
 		<RdXmlFile Include="LibCpp2IL.RD.xml" />
 	</ItemGroup>

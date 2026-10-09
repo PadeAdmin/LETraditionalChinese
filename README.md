@@ -102,3 +102,7 @@ Compress-Archive -Path .\artifacts\publish\* -DestinationPath .\artifacts\LETrad
 - [Noto Sans TC](https://github.com/google/fonts/tree/main/ofl/notosanstc)
 
 本儲存庫與發布包不包含遊戲原始資產。問題請在本 fork 回報，避免將尚未合併的延伸版本問題直接報給原作者。
+
+## 協作
+
+Fork、push 與向原作者提出 PR 的步驟見 [CONTRIBUTING.md](CONTRIBUTING.md)。

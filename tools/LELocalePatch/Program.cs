@@ -143,7 +143,7 @@ namespace LELocalePatch {
 					var tableEnties = stringTable["m_TableData"]["Array"];
 					var filename = stringTable["m_Name"].AsString + ".json";
 
-					Console.Write(filename + " ... "); 
+					Console.Write(filename + " ... ");
 					switch (mode) {
 						case Mode.Export:
 							using(Stream stream = zip is null
@@ -182,7 +182,7 @@ namespace LELocalePatch {
 
 					// The `Pack` method doesn't consider the replacer (The modified data), so write and read again here.
 					var uncompressed = new MemoryStream();
-					bundle.file.Write(new(uncompressed)); 
+					bundle.file.Write(new(uncompressed));
 					bundle.file.Close();
 					bundle.file.Read(new(uncompressed));
 
