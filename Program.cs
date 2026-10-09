@@ -13,6 +13,29 @@ public static class Program {
             LEFontPatch.PermaFontPatch.Check(Path.Combine(args[1], "Last Epoch_Data"));
             return;
         }
+        if (args.Length == 2 && args[0] == "--refresh-fonts") {
+            if (System.Diagnostics.Process.GetProcessesByName("Last Epoch").Length != 0) {
+                Console.Error.WriteLine("Please close Last Epoch before patching.");
+                Environment.ExitCode = 1;
+                return;
+            }
+            var fontFolder = Path.Combine(AppContext.BaseDirectory, "LETraditionalChinese");
+            if (!Directory.Exists(fontFolder)) {
+                Console.Error.WriteLine("The LETraditionalChinese data folder is missing beside this executable.");
+                Environment.ExitCode = 1;
+                return;
+            }
+            try {
+                var dataPath = Path.Combine(args[1], "Last Epoch_Data");
+                LEFontPatch.Program.Run(dataPath, fontFolder);
+                LEFontPatch.BundleFontPatch.Run(dataPath, fontFolder);
+                LEFontPatch.PermaFontPatch.Run(dataPath, fontFolder);
+            } catch (Exception ex) {
+                Console.Error.WriteLine(ex);
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
         if (System.Diagnostics.Process.GetProcessesByName("Last Epoch").Length != 0) {
             Console.WriteLine("Please close Last Epoch before patching.");
             Environment.ExitCode = 1;

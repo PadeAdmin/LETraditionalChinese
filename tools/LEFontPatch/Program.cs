@@ -139,6 +139,7 @@ namespace LEFontPatch {
 				}
 
 				if (excludes.Count == 0 && json["cancelIfNoFontReplaced"] is JsonValue v && (bool)v) {
+					manager.Save(); // A font update can still refresh the shared source TTF.
 					Console.WriteLine("No font replaced, cancelling . . .");
 					return;
 				}

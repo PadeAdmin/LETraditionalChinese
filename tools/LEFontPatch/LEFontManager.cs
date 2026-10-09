@@ -144,8 +144,17 @@ namespace LEFontPatch {
 					if (infos[i].TypeId == (int)AssetClassID.Font)
 						FontFileNames.TryAdd(GetAssetName(resources, infos[i]), ~i);
 			}
-			if (FontFileNames.TryGetValue(name, out index))
+			if (FontFileNames.TryGetValue(name, out index)) {
+				// Refresh the embedded source font in place when updating an installation.
+				var existingOffset = sizeof(int) + nameLen + sizeof(float);
+				existingOffset = (existingOffset + 3) & ~3;
+				const int assetRefSize = sizeof(int) + sizeof(long);
+				data.AsSpan(existingOffset, assetRefSize).Clear();
+				data.AsSpan(existingOffset + assetRefSize + sizeof(float), assetRefSize).Clear();
+				GetAsset(index).SetNewData(data);
+				rModified = true;
 				return false;
+			}
 
 			var offset = sizeof(int) + nameLen + sizeof(float); // m_Name, m_LineSpacing
 			// Align to 4

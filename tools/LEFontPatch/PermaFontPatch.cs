@@ -36,7 +36,11 @@ public static class PermaFontPatch {
     var field=manager.GetBaseField(assets,info);
     if(!field["m_CharacterTable"].IsDummy)fonts[info.PathId]=field;
    }
-   if(fonts.Values.Any(f=>f["m_Name"].AsString=="jf-openhuninn-2.1 SDF32")){Console.WriteLine("PermaLoad Powder fonts already installed.");return;}
+   if(fonts.Values.Any(f=>f["m_Name"].AsString=="jf-openhuninn-2.1 SDF32")) {
+    var dynamicFont=fonts.Values.Single(f=>f["m_Name"].AsString.StartsWith("jf-openhuninn-2.1")&&f["m_AtlasPopulationMode"].AsInt==1);
+    RefreshDynamicSource(path,bundle,assets,manager,dynamicFont,folder);
+    return;
+   }
    var originals=assets.file.AssetInfos.ToDictionary(i=>i.PathId,i=>Hash(assets,i));
    var expected=new Dictionary<long,byte[]>();
    var nextId=assets.file.AssetInfos.Max(i=>i.PathId)+1;
@@ -120,6 +124,32 @@ public static class PermaFontPatch {
    check.UnloadAll();manager.UnloadAll();File.Move(temporary,path,true);File.Delete(unpacked);
    Console.WriteLine($"PermaLoad verified: {fonts.Count} fonts handled; all other original payloads unchanged; 6 Powder assets added.");
   } finally{manager.UnloadAll();}
+ }
+ static void RefreshDynamicSource(string path,BundleFileInstance bundle,AssetsFileInstance assets,AssetsManager manager,AssetTypeValueField dynamicFont,string folder) {
+  var source=manager.GetExtAsset(assets,dynamicFont["m_SourceFontFile"]);
+  if(source.file!=assets||source.info.TypeId!=(int)AssetClassID.Font)throw new InvalidDataException("Perma dynamic font source is not local.");
+  var raw=File.ReadAllBytes(Path.Combine(folder,"fonts","jf-openhuninn-2.1.dat"));
+  var field=source.baseField.TemplateField.MakeValue(new AssetsFileReader(new MemoryStream(raw)),0);
+  if(!raw.AsSpan().SequenceEqual(field.WriteToByteArray()))throw new InvalidDataException("Updated Perma source font layout mismatch.");
+  var nameLength=BitConverter.ToInt32(raw);
+  var offset=(4+nameLength+4+3)&~3;
+  raw.AsSpan(offset,12).Clear();raw.AsSpan(offset+16,12).Clear();
+  var originals=assets.file.AssetInfos.ToDictionary(i=>i.PathId,i=>Hash(assets,i));
+  var expected=SHA256.HashData(raw);
+  source.info.SetNewData(raw);
+  bundle.file.BlockAndDirInfo.DirectoryInfos[0].SetNewData(assets.file);
+  var unpacked=path+".unpacked";var temporary=path+".new";
+  try {
+   using(var writer=new AssetsFileWriter(unpacked))bundle.file.Write(writer);
+   bundle.file.Close();using(var reader=File.OpenRead(unpacked)) {
+    bundle.file.Read(new AssetsFileReader(reader));
+    using var writer=new AssetsFileWriter(temporary);bundle.file.Pack(writer,AssetBundleCompressionType.LZ4);
+   }
+   var check=new AssetsManager();var checkBundle=check.LoadBundleFile(temporary);var output=check.LoadAssetsFileFromBundle(checkBundle,0);
+   if(output.file.AssetInfos.Count!=originals.Count)throw new InvalidDataException("Perma refresh asset count mismatch.");
+   foreach(var info in output.file.AssetInfos){var wanted=info.PathId==source.info.PathId?Convert.ToHexString(expected):originals[info.PathId];if(Hash(output,info)!=wanted)throw new InvalidDataException("Perma refreshed source verification failed.");}
+   check.UnloadAll();File.Move(temporary,path,true);Console.WriteLine("PermaLoad dynamic font source updated and verified.");
+  } finally { if(File.Exists(unpacked))File.Delete(unpacked);if(File.Exists(temporary))File.Delete(temporary); }
  }
  static string Hash(AssetsFileInstance file,AssetFileInfo info){
   file.file.Reader.Position=info.GetAbsoluteByteOffset(file.file);
